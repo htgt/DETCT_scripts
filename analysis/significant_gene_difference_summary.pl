@@ -12,48 +12,49 @@ use List::MoreUtils qw( all );
 use List::Util qw( sum );
 use IO::File;
 use Pod::Usage;
+use Path::Class;
 use feature qw( say );
 
 use Smart::Comments;
 
 my $log_level = $WARN;
 GetOptions(
-    'help'                 => sub { pod2usage( -verbose    => 1 ) },
-    'man'                  => sub { pod2usage( -verbose    => 2 ) },
-    'debug'                => sub { $log_level = $DEBUG },
-    'verbose'              => sub { $log_level = $INFO },
-    'sig-file=s'           => \my $sig_file,
-    'all-file=s'           => \my $all_file,
-    'groups-file=s'        => \my $groups_file,
-    'species=s'            => \my $species,
-    'low_value=i'          => \my $low_value,
-    'high_value=i'         => \my $high_value,
-    'ens_gene=s'           => \my $ens_gene_id,
-    'output_type=s'        => \my $output_type,
+    'help'          => sub { pod2usage( -verbose    => 1 ) },
+    'man'           => sub { pod2usage( -verbose    => 2 ) },
+    'debug'         => sub { $log_level = $DEBUG },
+    'verbose'       => sub { $log_level = $INFO },
+    'sig-file=s'    => \my $sig_file,
+    'all-file=s'    => \my $all_file,
+    'groups-file=s' => \my $groups_file,
+    'low-value=i'   => \my $low_value,
+    'high-value=i'  => \my $high_value,
+    'ens-gene=s'    => \my $ens_gene_id,
+    'output-type=s' => \my $output_type,
+    'output-dir=s'  => \my $dir,
 ) or pod2usage(2);
 
 Log::Log4perl->easy_init( { level => $log_level, layout => '%p %x %m%n' } );
-LOGDIE( 'Specify file with significant difference genes' ) unless $sig_file;
-LOGDIE( 'Specify file with all genes' ) unless $all_file;
-LOGDIE( 'Specify file with groups' ) unless $groups_file;
+LOGDIE( 'Specify file with significant genes: --sig-file' ) unless $sig_file;
+LOGDIE( 'Specify file with all genes: --all-file' )         unless $all_file;
+LOGDIE( 'Specify file with groups: --groups-file' )         unless $groups_file;
+LOGDIE( 'Specify output dir: --output-dir ' )               unless $all_file;
 
-$species     ||= 'Human';
+#
+# SETUP
+#
 $low_value   ||= 10;
 $high_value  ||= 500;
-# ensembl of marker_symbol
-$output_type ||= 'ensembl';
+$output_type ||= 'ensembl'; #ensembl for marker_symbol
 
-my $ensembl_util = LIMS2::Util::EnsEMBL->new( species => $species );
+my $output_dir = dir( $dir );
+$output_dir->mkpath;
 
 my $group_details = LoadFile( $groups_file );
 my @group_names = keys %{ $group_details };
 
-#my ( $target_output, $target_output_csv, $design_output, $design_output_csv, $failed_output, $failed_output_csv );
-#$target_output = IO::File->new( 'target_parameters.csv' , 'w' );
-#$target_output_csv = Text::CSV->new( { eol => "\n" } );
-#$target_output_csv->print( $target_output, \@TARGET_COLUMN_HEADERS );
-
-# parse read count data from sig.csv file
+#
+# Parse data from sig.csv
+#
 my %genes_data;
 my $input_csv = Text::CSV->new();
 open ( my $input_fh, '<', $sig_file ) or die( "Can not open $sig_file " . $! );
@@ -61,7 +62,7 @@ $input_csv->column_names( @{ $input_csv->getline( $input_fh ) } );
 while ( my $data = $input_csv->getline_hr( $input_fh ) ) {
     # filter out any data we see as invalid
     next if is_invalid_gene_data( $data );
-    my $ens_id = $data->{'e72 Ensembl Gene ID'}; 
+    my $ens_id = $data->{'e72 Ensembl Gene ID'};
 
     next if $ens_gene_id && $ens_gene_id ne $ens_id;
 
@@ -78,14 +79,15 @@ my $high_expression_genes = find_high_expression_genes( \%genes_data );
 print_diff_results( $low_expression_genes, 'low_expression' );
 print_diff_results( $high_expression_genes, 'high_expression' );
 
-
-# look at all.csv
+#
+# Parse data from all.csv
+#
 my %all_genes;
 $input_csv = Text::CSV->new();
 open ( $input_fh, '<', $all_file ) or die( "Can not open $all_file " . $! );
 $input_csv->column_names( @{ $input_csv->getline( $input_fh ) } );
 while ( my $data = $input_csv->getline_hr( $input_fh ) ) {
-    my $ens_id = $data->{'e72 Ensembl Gene ID'}; 
+    my $ens_id = $data->{'e72 Ensembl Gene ID'};
     next unless $ens_id;
 
     next if exists $all_genes{$ens_id};
@@ -93,7 +95,7 @@ while ( my $data = $input_csv->getline_hr( $input_fh ) ) {
 }
 close $input_fh;
 
-print_gene_lists( \%all_genes, 'all genes' );
+print_gene_lists( \%all_genes, 'all_genes' );
 
 # genes in all.csv but not in sig.csv ( i.e. expression does not change )
 my %non_change_genes;
@@ -102,34 +104,42 @@ for my $gene ( keys %all_genes ) {
         $non_change_genes{ $gene } = $all_genes{$gene};
     }
 }
-print_gene_lists( \%non_change_genes, 'non changed genes' );
+print_gene_lists( \%non_change_genes, 'non_changed_genes' );
 
 sub print_diff_results {
     my ( $data, $type ) = @_;
 
     for my $group ( @group_names ) {
         my $genes = $data->{$group}{$output_type};
-        say  uc($type . ':' . $group);
-        say join"\n", @{ $genes };
-        say '------------------';
+        my $fh = create_file( $type . '-' . $group );
+        say $fh join"\n", @{ $genes };
     }
 }
 
 sub print_gene_lists {
     my ( $list, $name ) = @_;
-    say uc( $name );
+
+    my $fh = create_file( $name );
     if ( $output_type eq 'ensembl' ) {
-        say join "\n", keys %{ $list }; 
+        say $fh join "\n", keys %{ $list };
     }
     else {
-        say join "\n", values %{ $list }; 
+        say $fh join "\n", values %{ $list };
     }
-    say '------------------';
+}
+
+sub create_file {
+    my $name = shift;
+
+    my $file = $output_dir->file( $name . '.txt' );
+    $file->touch;
+
+    return $file->openw;
 }
 
 sub process_gene {
     my ( $data, $ens_id ) = @_;
-    my %gene_data; 
+    my %gene_data;
 
     $gene_data{transcript} = $data->{'e72 Ensembl Transcript ID'};
     $gene_data{transcript_type} = $data->{'Transcript type'};
@@ -138,7 +148,7 @@ sub process_gene {
     for my $group ( @group_names ) {
         my $avg_read_count = _avg_read_count( $data, $group );
         $gene_data{$group}{'avg_read_count'} = $avg_read_count;
-    } 
+    }
 
     return \%gene_data;
 }
@@ -191,6 +201,7 @@ sub _avg_read_count {
 sub de_dupe {
     my ( $genes_data ) = @_;
 
+    my $fh = create_file( 'duplicates' );
     for my $gene ( keys %{ $genes_data } ) {
         Log::Log4perl::NDC->remove;
         Log::Log4perl::NDC->push( $gene );
@@ -200,14 +211,19 @@ sub de_dupe {
         }
         else {
             INFO( "Multiple Transcripts for gene" );
+            my @transcripts = map { $_->{transcript} } @rows;
             my @filtered_rows = grep{ $_->{transcript_type} =~ /protein_coding/ } @rows;
 
             if ( scalar( @filtered_rows ) == 1 ) {
+                say $fh $gene . ' : ' . join(',',@transcripts) . ' : ' . 'only one protein coding.';
                 DEBUG( "... but only one transcript is protein coding, using that" );
                 $genes_data->{$gene} = shift @filtered_rows;
             }
             else {
                 WARN('... and more than one of the transcripts are protein coding, choosing by read count' );
+                say $fh $gene . ' : '
+                    . join( ',', @transcripts ) . ' : '
+                    . 'multiple protein coding, picked one with most read count.';
                 my @sorted_counts = sort { _sum_counts($b) <=> _sum_counts($a) } @filtered_rows;
                 $genes_data->{$gene} = shift @sorted_counts;
             }
@@ -247,7 +263,7 @@ sub find_high_expression_genes {
         my @high_count_groups = grep { $genes_data->{$gene}{$_}{avg_read_count} > $high_value } @group_names;
 
         my $gene_name = $genes_data->{$gene}{gene_name};
-        push @{ $high_expression_genes{$_}{marker_symbols} }, $gene_name for @high_count_groups;
+        push @{ $high_expression_genes{$_}{marker_symbol} }, $gene_name for @high_count_groups;
         push @{ $high_expression_genes{$_}{ensembl} }, $gene for @high_count_groups;
     }
 
@@ -258,7 +274,7 @@ __END__
 
 =head1 NAME
 
-signification_gene_difference_summary.pl - 
+signification_gene_difference_summary.pl -
 
 =head1 SYNOPSIS
 
@@ -269,7 +285,15 @@ signification_gene_difference_summary.pl -
       --debug           Debug output
       --verbose         Verbose output
       --species         Species of targets ( default Human )
+      --sig-file*       The sig.csv file produced by the pipeline
+      --all-file*       The all.csv file produced by the pipeline
+      --groups-file*    A yaml file describing the grouping of the run
+      --low-value       Read count considered to be low, defaults to 10
+      --high-value      Read count considered to be high, defaults to 500
+      --output-type     Identifiers used for genes in output, ensembl or marker_symbol only, default ensembl
+      --output-dir*     Directory where output files created
 
+  Flags marker with (*) are mandatory.
 
 =head1 DESCRIPTION
 
