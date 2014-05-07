@@ -1,0 +1,33 @@
+iRODS stands for Integrated Rule Oriented Data Systems. It is the next generation data grid solution allowing a user to access files from an online file system, near-line tapes, relational databases, and the web without worrying about where the data are actually located. The policies for managing data at the server level are hard-coded. Also, if users want to perform complex operations or data workflow, they need to script or program this at the client level.
+
+http://mediawiki.internal.sanger.ac.uk/index.php/IRODS_for_Sequencing_Users
+
+Useful Commands:
+ kinit - to initialise your account
+ ipwd - to give the working directory
+ ils - to list the files in the working directory
+ icd - to change directory
+ iget - get a file
+ imeta - add, remove, list, or query user-defined Attribute-Value-Unit triplets metadata
+
+There are more commands
+
+
+imeta command - used to find data and list attributes of data ( e.g finding the tag names )
+
+For our case to list all the bam files for a run we are intersted in run the following command:
+/software/irods/icommands/bin/imeta qu -z seq -d id_run = 12529 and lane = 3 and target = 1
+
+broken down:
+qu - query object with specific metadata values  ( e.g for a specific run and lane ) 
+-d attributes to look at 
+-z zone, for us thats seq
+
+
+then to get meta info on a specific file
+/software/irods/icommands/bin/imeta ls -d /seq/12529/12529_3#1.bam
+
+the -d flag points to a specific file
+You can optionally specify a attribute name to only get that information:
+/software/irods/icommands/bin/imeta ls -d /seq/12529/12529_3#1.bam tag
+

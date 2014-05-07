@@ -1,0 +1,83 @@
+MY RUN NOTES
+
+Not installing anything, just using the perl modules / other software in team31's /software dir
+
+1/ ssh into farm3-login
+2/ go to /lustre/scratch109/sanger/sp12/diff_exp
+3/ create / find the yaml config file you want to run
+4/ make a dir for the analysis to run in
+5/ source ~/workspace/differential_expression_pipeline/config/setup.sh
+6/ Run the command to start the analysis:
+
+perl /software/team31/packages/DETCT/script/run_de_pipeline.pl --dir [dir]--analysis_yaml [config_yaml] --stages_yaml de.yaml --verbose 2>&1 | tee [log file name]
+
+WARNING: This links to the current DETCT version that team31 uses, so it may change between runs
+
+========================================================================================================
+ORIGINAL NOTES FROM IAN:
+
+So the code for the pipeline is at:
+
+https://github.com/iansealy/DETCT
+
+If you're not a Dist::Zilla user then you probably just want to download and install the latest release:
+
+https://github.com/iansealy/DETCT/releases
+
+(But if/when you want to make changes then you'll probably need to use Dist::Zilla. Sorry!)
+
+There's a whole bunch of dependencies but Dist::Zilla will take care of working them out and putting them in Makefile.PL and Build.PL. I think the only dependency not on CPAN is the Ensembl Core API. And you might have to semi-manually install Bio::DB::Sam. I do:
+
+SAMTOOLS=/software/team31/packages/samtools \
+PERL5LIB=/software/team31/bioperl/bioperl-1-6-9:$PERL5LIB \
+/software/bin/perl -MCPAN -e 'shell'
+install Bio::DB::Bam
+
+You'll also need to compile the peak finder HMM after you've installed it. Something like:
+
+mkdir DETCT-0.1.2/bin
+g++ -o DETCT-0.1.2/bin/quince_chiphmm DETCT-0.1.2/src/quince_chiphmmnew.cpp
+
+(I should automate that, but haven't tried to work out how to get Dist::Zilla to do it yet.)
+
+As indicated above, you'll need samtools installed. You'll also need BWA. We use Rob's hardened version of 0.5.10. So I do something like:
+
+git clone git://github.com/daviesrob/bwa.git bwa-0.5.10-mt_fixes
+cd bwa-0.5.10-mt_fixes
+git checkout 0.5.10-mt_fixes
+make
+cp bwa /software/team31/bin/bwa-0.5.10-mt_fixes
+ln -s /software/team31/bin/bwa-0.5.10-mt_fixes /software/team31/bin/bwa
+
+You'll need DESeq installed. I do:
+
+wget http://bioconductor.org/packages/release/bioc/src/contrib/DESeq_1.12.0.tar.gz
+/software/bin/R-3.0.0 CMD INSTALL DESeq_1.12.0.tar.gz -l /software/team31/R/
+
+You'll also need to get the modified Picard from:
+
+https://github.com/iansealy/picard-detct
+
+This is an unofficial mirror of their SVN repository. You'll definitely just want to grab the release from:
+
+https://github.com/iansealy/picard-detct/releases
+
+So that's the nice part. You'll also need to look at the attached recipe. This is the bit we haven't pipelined yet. Sorry! It takes NPG BAM files and extracts FASTQ, does some detagging and trimming and then realigns. Let me know if any of it doesn't make sense.
+
+To run the rest of the pipeline we do something like:
+
+perl \
+-I/software/team31/ensembl/branch-ensembl-72/ensembl/modules \
+-I/software/team31/packages/DETCT/lib \
+-I/software/team31/bioperl/bioperl-1-6-9 \
+/software/team31/packages/DETCT/script/run_de_pipeline.pl \
+--dir 9706_8 \
+--analysis_yaml 9706_8.yaml \
+--stages_yaml de.yaml \
+--verbose
+
+I've attached a de.yaml file to this email. It just tells the pipeline what stages to run. You might need to up some of the default memory settings for mouse because of the bigger genome. It'll still work without changes though (it ups the memory if a job fails).
+
+I've also attached an analysis YAML file. This is a zebrafish one so you'll need to update a few things.
+
+

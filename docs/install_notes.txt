@@ -1,0 +1,48 @@
+Pipeline Dependancies:
+----------------------
+
+## PERl5LIB
+/software/team31/perl/lib/perl5 
+/software/team31/bioperl/bioperl-1-6-9
+/software/team31/packages/DETCT/lib
+
+Check Bio::DB::Sam is installed
+
+
+## peak finder HMM
+     - must compile after installing
+
+/software/team31/packages/DETCT/bin/quince_chiphmmnew
+
+## samtools
+SAMTOOLS=/software/team31/packages/samtools \
+/software/team31/bin/samtools
+
+## bwa - robs hardened version of 0.5.10
+cp bwa /software/team31/bin/bwa-0.5.10-mt_fixes
+ln -s /software/team31/bin/bwa-0.5.10-mt_fixes /software/team31/bin/bwa
+
+## DESeq
+/software/bin/R-3.0.0 CMD INSTALL DESeq_1.12.0.tar.gz -l /software/team31/R/
+
+## Picard ( Modified )
+https://github.com/iansealy/picard-detct
+https://github.com/iansealy/picard-detct/releases
+
+/software/team31/packages/picard-tools-1.79-detct/SamToFastq.jar
+
+# other
+/software/team31/packages/DETCT/script/run_deseq.R
+
+CONFIG
+------
+
+analysis_yaml
+- 
+
+
+stages_yaml
+- de.yaml = sample
+- It just tells the pipeline what stages to run. 
+- You might need to up some of the default memory settings for mouse because of the bigger genome.
+    - It'll still work without changes though (it ups the memory if a job fails).
