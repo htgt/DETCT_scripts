@@ -18,7 +18,7 @@ fi
 
 echo "Completed all $num_jobs jobs successfully"
 echo "Deleting sorted BAM files for $run_lane"
-#rm $run_lane/*.bam $run_lane/*.bai
+rm $run_lane/*.bam $run_lane/*.bai
 
 echo "Merging FASTQ file for $run_lane"
 bsub -o $run_lane/1.merge_fastq.o -e $run_lane/1.merge_fastq.e \
